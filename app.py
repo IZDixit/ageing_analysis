@@ -226,7 +226,7 @@ else:
         
         selection = st.dataframe(
             display_table.style.format({"Total Amount": "{:,.2f}"}),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             selection_mode="single-row",
             on_select="rerun"
@@ -264,7 +264,7 @@ else:
             # Show Detailed Table
             st.dataframe(
                 drill_down_df[['Name', 'Date', 'Due Date', 'Open Balance', 'Num']],
-                use_container_width=True,
+                width="stretch",
                 column_config={
                     "Date": st.column_config.DateColumn("Inv Date", format="DD/MM/YYYY"),
                     "Due Date": st.column_config.DateColumn("Due Date", format="DD/MM/YYYY"),
