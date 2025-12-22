@@ -143,6 +143,141 @@ else:
     # --- OVERVIEW MODE (No Customer Selected) ---
     st.subheader("Global Visual Analysis")
 
+    # --- NEW: Monthly Open Invoices ---
+    st.markdown("### Monthly Open Invoices Overview")
+    
+    # 1. Filter for Open Invoices
+    # We care about Invoices that are still open
+    monthly_invoices_df = filtered_df[(filtered_df['Type'] == 'Invoice') & (filtered_df['Open Balance'] > 0)].copy()
+    
+    if not monthly_invoices_df.empty:
+        # 2. Group by Month
+        monthly_invoices_df['Month_Sort'] = monthly_invoices_df['Date'].dt.to_period('M')
+        monthly_invoices_df['Month_Label'] = monthly_invoices_df['Date'].dt.strftime('%b %Y')
+        
+        # Sum Open Balance per Month
+        monthly_grouped = monthly_invoices_df.groupby(['Month_Sort', 'Month_Label'])['Open Balance'].sum().reset_index()
+        monthly_grouped = monthly_grouped.sort_values('Month_Sort')
+        
+        # 3. Visualization - Bar Chart
+        fig_monthly_open = px.bar(monthly_grouped, x='Month_Label', y='Open Balance',
+                                 title="Total Open Invoices Amount by Month",
+                                 text_auto='.2s', color='Open Balance')
+        fig_monthly_open.update_layout(xaxis_title="Month", yaxis_title="Total Open Amount")
+        fig_monthly_open.update_layout(xaxis_title="Month", yaxis_title="Total Open Amount")
+        st.plotly_chart(fig_monthly_open, use_container_width=True)
+        
+    else:
+        st.info("No open invoices found.")
+    
+    st.markdown("---")
+    
+    # --- NEW: Interactive Collections Table (Drill-Down) ---
+    st.subheader("Interactive Collections Analysis")
+    
+    # 1. User Input for Period
+    group_days = st.number_input("Aggregation Period (Days)", min_value=1, value=30, step=1)
+    
+    # 2. Prepare Data
+    # Use the same 'monthly_invoices_df' (Open Invoices) if available, or filter again
+    table_df = filtered_df[(filtered_df['Type'] == 'Invoice') & (filtered_df['Open Balance'] > 0)].copy()
+    
+    if not table_df.empty:
+        # Sort by Date
+        table_df = table_df.sort_values('Date')
+        
+        # Resample logic
+        # We need a custom grouper or just resample on Date
+        # Calculate a 'Period Group' to group dates into bins of 'group_days'
+        # To make it clean, we can assume the periods start from the first date in the dataset
+        min_date = table_df['Date'].min()
+        
+        # Assign a 'Period ID' to each row
+        # (Row Date - Min Date) // Days -> Period Index
+        table_df['Days_From_Start'] = (table_df['Date'] - min_date).dt.days
+        table_df['Period_Index'] = table_df['Days_From_Start'] // group_days
+        
+        # Calculate Start and End for each period index
+        # Start = Min + Index * Days
+        # End = Start + Days - 1 (inclusive usually, or just < Start + Days)
+        
+        # Group by Period Index to get aggregations
+        period_stats = table_df.groupby('Period_Index').agg({
+            'Open Balance': ['sum', 'count'],
+            'Date': 'min' # Just to get a representative date, though we calculate exact start below
+        }).reset_index()
+        
+        # Flatten columns
+        period_stats.columns = ['Period_Index', 'Total Amount', 'Invoice Count', 'First_Date_In_Group']
+        
+        # Calculate Display Columns
+        period_stats['Period Start'] = min_date + pd.to_timedelta(period_stats['Period_Index'] * group_days, unit='D')
+        period_stats['Period End'] = period_stats['Period Start'] + pd.to_timedelta(group_days - 1, unit='D')
+        
+        # Create Label
+        period_stats['Period Label'] = period_stats['Period Start'].dt.strftime('%Y-%m-%d') + " to " + period_stats['Period End'].dt.strftime('%Y-%m-%d')
+        
+        # Format for display
+        display_table = period_stats[['Period Start', 'Period End', 'Invoice Count', 'Total Amount']].copy()
+        
+        # 3. Display Summary Table
+        st.markdown("##### Summary by Period")
+        st.write("Select a row to see details.")
+        
+        selection = st.dataframe(
+            display_table.style.format({"Total Amount": "{:,.2f}"}),
+            use_container_width=True,
+            hide_index=True,
+            selection_mode="single-row",
+            on_select="rerun"
+        )
+        
+        # 4. Handle Selection (Drill Down)
+        if selection.selection.rows:
+            selected_idx = selection.selection.rows[0]
+            # Get the Period Start/End from the displayed dataframe
+            # Note: The displayed dataframe index matches logic if we didn't sort differently. 
+            # We strictly constructed `display_table` from `period_stats` which is sorted by Index.
+            # So `selected_idx` maps directly to `period_stats` row.
+            
+            sel_record = period_stats.iloc[selected_idx]
+            p_start = sel_record['Period Start']
+            p_end = sel_record['Period End']
+            
+            st.markdown(f"##### Details for Period: {p_start.strftime('%d/%m/%Y')} - {p_end.strftime('%d/%m/%Y')}")
+            
+            # Filter Original Data
+            # Start is inclusive, End is inclusive (since we successfully subtracted 1 day for display, let's use the explicit comparison)
+            # Actually, using strictly date comparison:
+            drill_down_df = table_df[
+                (table_df['Date'] >= p_start) & 
+                (table_df['Date'] <= p_start + pd.Timedelta(days=group_days)) # Use upper bound exclusive-like logic or cover the full window
+            ].copy()
+            
+            # Wait, `Period End` above was `Start + Days - 1`. 
+            # So `[Start, End]` is the inclusive range.
+            drill_down_df = table_df[
+                (table_df['Date'] >= p_start) & 
+                (table_df['Date'] <= p_end + pd.Timedelta(days=1)) # slightly loose to capture time components if any, though we loaded as date. Safe to use <= End if pure dates.
+            ]
+            
+            # Show Detailed Table
+            st.dataframe(
+                drill_down_df[['Name', 'Date', 'Due Date', 'Open Balance', 'Num']],
+                use_container_width=True,
+                column_config={
+                    "Date": st.column_config.DateColumn("Inv Date", format="DD/MM/YYYY"),
+                    "Due Date": st.column_config.DateColumn("Due Date", format="DD/MM/YYYY"),
+                    "Open Balance": st.column_config.NumberColumn("Amount", format="$%.2f"),
+                    "Name": "Customer"
+                },
+                hide_index=True
+            )
+    else:
+        st.info("No data for table.")
+    
+    st.markdown("---")
+
     col_left, col_right = st.columns(2)
 
     with col_left:
