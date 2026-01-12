@@ -2,6 +2,11 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+
+# Define custom lighter red colormap
+# Replacing standard "Reds" which was too dull/dark
+lighter_red_cmap = mcolors.LinearSegmentedColormap.from_list("LighterRed", ["#ffffff", "#ff4b4b"])
 
 # KPIs and Page Conig
 st.set_page_config(page_title="Customer Invoice Dashboard", layout="wide")
@@ -119,8 +124,8 @@ if selected_customers:
         summary_display.columns = ['Month', 'Net Amount']
         
         st.dataframe(
-            summary_display.style.background_gradient(cmap="Reds", subset=['Net Amount']).format("{:,.2f}", subset=['Net Amount']),
-            width="stretch",
+            summary_display.style.background_gradient(cmap=lighter_red_cmap, subset=['Net Amount']).format("{:,.2f}", subset=['Net Amount']),
+            use_container_width=True,
             hide_index=True
         )
         
@@ -129,7 +134,7 @@ if selected_customers:
     st.markdown("#### Detailed Transaction History")
     st.dataframe(
         filtered_df[['Date', 'Type', 'Num', 'Due Date', 'Open Balance']].sort_values(by='Date', ascending=False).style.format({"Open Balance": "{:,.2f}"}),
-        width="stretch",
+        use_container_width=True,
         column_config={
             "Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"),
             "Due Date": st.column_config.DateColumn("Due Date", format="DD/MM/YYYY"),
@@ -226,7 +231,7 @@ else:
         
         selection = st.dataframe(
             display_table.style.format({"Total Amount": "{:,.2f}"}),
-            width="stretch",
+            use_container_width=True,
             hide_index=True,
             selection_mode="single-row",
             on_select="rerun"
@@ -264,7 +269,7 @@ else:
             # Show Detailed Table
             st.dataframe(
                 drill_down_df[['Name', 'Date', 'Due Date', 'Open Balance', 'Num']],
-                width="stretch",
+                use_container_width=True,
                 column_config={
                     "Date": st.column_config.DateColumn("Inv Date", format="DD/MM/YYYY"),
                     "Due Date": st.column_config.DateColumn("Due Date", format="DD/MM/YYYY"),
@@ -352,8 +357,8 @@ else:
 
         # Format the table for better readability with heatmap coloring
         selection = st.dataframe(
-            pivot_table_display.style.background_gradient(cmap="Reds", subset=existing_months + ['Total']).format("{:,.2f}", subset=existing_months + ['Total']),
-            width="stretch",
+            pivot_table_display.style.background_gradient(cmap=lighter_red_cmap, subset=existing_months + ['Total']).format("{:,.2f}", subset=existing_months + ['Total']),
+            use_container_width=True,
             hide_index=True, # Hide the default numeric index
             column_config=column_config,
             on_select="rerun",
